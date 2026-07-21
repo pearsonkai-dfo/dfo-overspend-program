@@ -20,5 +20,5 @@ After downloading Python 3.13.1, click on the the `overspendprogram.py` file in 
 You can run the program by double clicking the `overspendprogram.py` source file. The program will open in the terminal, and prompt you to paste the file paths of the SAP and Blanket Authority Excel sheets, before running and outputting a new Excel document with information of the flagged cardholders and their GL account numbers. 
 
 ### Contact
-Email: Kai.Pearson@dfo-mpo.gc.ca
-GitHub kaipearson-dfo
+Email: Kai.Pearson@dfo-mpo.gc.ca  
+GitHub: kaipearson-dfo  
