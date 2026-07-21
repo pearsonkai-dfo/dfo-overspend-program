@@ -6,7 +6,7 @@ class PurchaseStrand:
     """
     def __init__(self,document: int, amount: int, cost_center: int, gl: int):
         self.document = document
-        self.amount = amount
+        self.amount : int = amount
         self.cost_center = cost_center
         self.gl = gl
 
@@ -17,7 +17,7 @@ class PurchaseStrand:
         return self.amount
 
     def get_cost_center(self):
-        return cost_center
+        return self.cost_center
 
     def get_gl(self):
         return self.gl

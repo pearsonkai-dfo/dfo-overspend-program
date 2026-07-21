@@ -1,16 +1,16 @@
-import os
-import glob
 import openpyxl
-import re
 import warnings
-import unicodedata
+from pathlib import Path 
+import math
 
-from decimal import Decimal
+#from decimal import Decimal
 
-from overspendclasses import Cardholder
+from overspendclasses import Card
 from overspendclasses import CostCenter
 from overspendclasses import Purchase
 from overspendclasses import PurchaseStrand
+from overspendclasses import Flag
+from overspendclasses import flag_codes
 
 ##### GENERAL CONSTANTS #####
 
@@ -22,7 +22,7 @@ CC_NUMBER_LENGTH = 6
 ##### SAP EXPORT SHEET CONSTANTS #####
 
 SAP_DOCUMENT_NUMBER_COLUMN_IDENTIFIER = "Document Number"
-SAP_CARDHOLDER_COLUMN_IDENTIFIER = "Cardholder Name"
+SAP_CARD_COLUMN_IDENTIFIER = "Card Number"
 SAP_COST_CENTER_COLUMN_IDENTIFIER = "Cost Center"
 SAP_GL_COLUMN_IDENTIFIER = "G/L Account"
 SAP_POSTED_AMOUNT_COLUMN_IDENTIFIER = "Transaction Amount"
@@ -30,8 +30,9 @@ SAP_MATCHING_AMOUNT_COLUMN_IDENTIFIER = "Matching Amount"
 
 ##### BLANKET AUTHORITY TRACKING SHEET CONSTANTS #####
 
-BA_CARDHOLDER_COLUMN_IDENTIFIER = "Cardholder Name" # Column name for the cardholders
-BA_LIMIT_COLUMN_IDENTIFIER = "BA Limit" # Column name for the budget limit
+BA_CARD_COLUMN_IDENTIFIER = "Card Number" # Column name for the card number
+BA_LOWER_LIMIT_COLUMN_IDENTIFIER = "Lower Limit Request" # Column name for the budget limit
+BA_HIGHER_LIMIT_COLUMN_IDENTIFIER = "Higher limit" # Column name for the budget limit
 BA_CC_COLUMN_IDENTIFIER = "Cost Center" # Column name for the cost centers
 BA_GL_COLUMN_IDENTIFIER = "Good or Service" # Column name for the GL Accounts
 BA_SUBSEQUENT_COLUMN_IDENTIFIER = "Subsequent Blanket Authority" # Column name for identifying if the cardholder already has a BA with the cost center
@@ -52,10 +53,13 @@ def remove_progress_bar():
 
 
 def place_progress_bar(bar_name: str, bar_segments: int, items_done: int, items_total: int):
+    bar = ""
+    if bar_name is not None:
+        bar = bar_name + " "
     percentage = items_done/items_total
     segments_filled = round(percentage * bar_segments)
     
-    bar = "["
+    bar += "["
     for i in range(segments_filled):
         bar += "#"
 
@@ -68,199 +72,36 @@ def place_progress_bar(bar_name: str, bar_segments: int, items_done: int, items_
     
 ##### FUNCTIONS START #####
 
-
-def normalize_name(name):
-    if not isinstance(name,str) and name is not None:
-        return None
-    
-    name = name.lower()
-
-    # Remove accents
-    name = ''.join(
-        c for c in unicodedata.normalize('NFD', name)
-        if unicodedata.category(c) != 'Mn'
-    )
-
-    # Remove apostrophes
-    name = name.replace("'", "")
-
-    # Replace separators with spaces
-    name = re.sub(r"[-,_/]", " ", name)
-
-    # Remove other junk
-    name = re.sub(r"[^a-z\s]", "", name)
-
-    # Collapse spaces
-    return " ".join(name.split())
-
-def cheap_match(target, holder):
-    t = target.lower().split()
-    h = holder.lower().split()
-
-    if len(t) < 2 or len(h) < 2:
-        return False
-
-    t_first = t[0]
-    h_first = h[0]
-
-    t_last = t[-1]
-    h_last = h[-1]
-
-    return (
-        t_first[0] == h_first[0]
-        and (
-            h_last.startswith(t_last)
-            or t_last.startswith(h_last)
-        )
-    )
-
-def medium_match(target, holder):
-    t = target.lower().split()
-    h = holder.lower().split()
-
-    if len(t) < 2 or len(h) < 2:
-        return False
-
-    t_first = t[0]
-    h_first = h[0]
-
-    t_last = t[-1]
-    h_last = h[-1]
-
-    return (
-        (
-            h_first.startswith(t_first)
-            or t_first.startswith(h_first)
-        )
-        and (
-            h_last.startswith(t_last)
-            or t_last.startswith(h_last)
-        )
-    )
-
-def name_score(target, holder):
-    t = target.lower().split()
-    h = holder.lower().split()
-
-    if len(t) < 2 or len(h) < 2:
-        return 0
-
-    t_first = t[0]
-    h_first = h[0]
-
-    t_last = t[-1]
-    h_last = h[-1]
-
-    # hard rejection
-    if t[0] != h[0]:
-        return 0
-
-    if t[0] != h[0]:
-        return 0
-
-    score = 0
-
-    # first name
-    if t_first == h_first:
-        score += 30
-    elif (
-        t_first.startswith(h_first)
-        or h_first.startswith(t_first)
-    ):
-        score += 20
-
-    # last name
-    if t_last == h_last:
-        score += 50
-    elif (
-        t_last.startswith(h_last)
-        or h_last.startswith(t_last)
-    ):
-        score += 35
-
-    # middle names
-    t_middle = t[1:-1]
-    h_middle = h[1:-1]
-
-    for tm in t_middle:
-        for hm in h_middle:
-            if (
-                hm.startswith(tm)
-                or tm.startswith(hm)
-            ):
-                score += 10
-                break
-
-    return score
-
-def find_best_match(target, libraryCardholder):
-    if not isinstance(target,str) and target is not None:
-        return None
-    
-    best_match = None
-    best_score = -1
-
-    for holder in libraryCardholder:
-
-        # Fast reject
-        if not cheap_match(target, holder):
-            continue
-
-        # Stronger filter
-        if not medium_match(target, holder):
-            continue
-
-        # Expensive scoring
-        score = name_score(target, holder)
-
-        if score > best_score:
-            best_score = score
-            best_match = holder
-
-    return best_match
+def convert(cents):
+    return f"{cents // 100}.{cents % 100:02d}"
 
 
-def searchSimilarNames(target, libraryCardholder):
-    target_parts = target.lower().split()
-
-    for holder in libraryCardholder:
-        holder_parts = holder.lower().split()
-
-        if len(target_parts) == len(holder_parts):
-            match = True
-
-            for t, h in zip(target_parts, holder_parts):
-                if not h.startswith(t):
-                    match = False
-                    break
-
-            if match:
-                return holder
-
-    return target
+def checkNone(set):
+    return None in set
 
 
-
-
-
-def readBASheet(path,libraryCardholder):
-    print("Loading workbook.", flush=True)
+def readBASheet(path,libraryCard,libraryFlag):
+    print("Loading workbook \"" + path + "\".", flush=True)
     BAWorkbook = openpyxl.load_workbook(path)
     print("Workbook loaded.", flush=True)
     BAWorksheet = BAWorkbook.active
 
-    cardholderColumn = None
-    limitColumn = None
+    cardColumn = None
+    lowerLimitColumn = None
+    higherLimitColumn = None
     costCenterColumn = None
     GLColumn = None
     SubsequentBAColumn = None
 
     for column in BAWorksheet.iter_cols():
-        if column[0].value == BA_CARDHOLDER_COLUMN_IDENTIFIER:
-            cardholderColumn = column[0].column - 1
+        if column[0].value == BA_CARD_COLUMN_IDENTIFIER:
+            cardColumn = column[0].column - 1
         
-        elif column[0].value == BA_LIMIT_COLUMN_IDENTIFIER:
-            limitColumn = column[0].column - 1
+        elif column[0].value == BA_LOWER_LIMIT_COLUMN_IDENTIFIER:
+            lowerLimitColumn = column[0].column - 1
+        
+        elif column[0].value == BA_HIGHER_LIMIT_COLUMN_IDENTIFIER:
+            higherLimitColumn = column[0].column - 1
         
         elif column[0].value == BA_CC_COLUMN_IDENTIFIER:
             costCenterColumn = column[0].column - 1
@@ -271,30 +112,37 @@ def readBASheet(path,libraryCardholder):
         elif column[0].value == BA_SUBSEQUENT_COLUMN_IDENTIFIER:
             SubsequentBAColumn = column[0].column - 1
     
-    if None in (cardholderColumn, limitColumn, costCenterColumn, GLColumn, SubsequentBAColumn):
-        raise Exception("Could not locate all required columns")
+    if None in (cardColumn,lowerLimitColumn, higherLimitColumn, costCenterColumn, GLColumn, SubsequentBAColumn):
+        print("Could not locate all required columns. Check column identifiers in Python File.")
         return
 
     for row in BAWorksheet.iter_rows(min_row=2):
-        name = row[cardholderColumn].value
-        limit = row[limitColumn].value
+        cardNum = row[cardColumn].value
+        limit = 20000
         costCenterNum = int(row[costCenterColumn].value)
+
+        if row[higherLimitColumn].value != None:
+            limit = row[higherLimitColumn].value
+        elif row[lowerLimitColumn].value != None:
+            limit = row[lowerLimitColumn].value
+
+        limit *= 100
         subsequentBA = row[SubsequentBAColumn].value == "Yes"
         
         textGL = row[GLColumn].value
         if textGL is None:
             continue
 
-        
-        if name not in libraryCardholder:
-            holder = Cardholder(name)
-            libraryCardholder[normalize_name(name)] = holder
+        if cardNum not in libraryCard:
+            card = Card(cardNum)
+            libraryCard[cardNum] = card
         else:
-            holder = libraryCardholder[name]
+            card = libraryCard[cardNum]
+
 
 
         costCenter = CostCenter(costCenterNum,limit)
-        holder.add_cost_center(costCenter)
+        card.add_cost_center(costCenter)
 
         while True:
             pos = textGL.find(ACCOUNT_NUM_IDENTIFIER)
@@ -309,29 +157,29 @@ def readBASheet(path,libraryCardholder):
 
 
 
-def readSAPExport(path,libraryCardholder,libraryDocument):
-    print("Loading workbook.", flush=True)
+def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
+    print("Loading workbook \"" + path + "\".", flush=True)
     SAPWorkbook = openpyxl.load_workbook(path)
     print("Workbook loaded.", flush=True)
     SAPWorksheet = SAPWorkbook.active
 
-    numPeople = 0
-    numKnown = 0
-    barUpdatesFreq = max(50,round(SAPWorksheet.max_row/38))
-
+    cardsRead = 0
+    cardsMatched = 0
+    barUpdatesFreq = max(42,round(6.7 * math.log(SAPWorksheet.max_row, 1.1) - 130))
+    
     documentColumn = None
-    cardholderColumn = None
+    cardNumberColumn = None
     costCenterColumn = None
     GLColumn = None
     postedAmoungColumn = None
     matchingAmountColumn = None
-
+    
     for column in SAPWorksheet.iter_cols():
         if column[0].value == SAP_DOCUMENT_NUMBER_COLUMN_IDENTIFIER:
             documentColumn = column[0].column - 1
 
-        elif column[0].value == SAP_CARDHOLDER_COLUMN_IDENTIFIER:
-            cardholderColumn = column[0].column - 1
+        elif column[0].value == SAP_CARD_COLUMN_IDENTIFIER:
+            cardNumberColumn = column[0].column - 1
 
         elif column[0].value == SAP_COST_CENTER_COLUMN_IDENTIFIER:
             costCenterColumn = column[0].column - 1
@@ -344,46 +192,79 @@ def readSAPExport(path,libraryCardholder,libraryDocument):
 
         elif column[0].value == SAP_MATCHING_AMOUNT_COLUMN_IDENTIFIER:
             matchingAmountColumn = column[0].column - 1
+
+    if checkNone([documentColumn, cardNumberColumn, costCenterColumn, GLColumn, postedAmoungColumn, matchingAmountColumn]):
+        print("Could not locate all required columns. Check column identifiers in Python File.")
+        return
     
     for row in SAPWorksheet.iter_rows(min_row=2):
+        
+        if row[0].row % barUpdatesFreq == 0:
+            remove_progress_bar()
+            place_progress_bar("SAP Extract",20,cardsRead,SAPWorksheet.max_row - 1)
+        
+        cardsRead += 1
+
         documentNum = row[documentColumn].value
-        cardholderName = row[cardholderColumn].value
+        cardNumber = row[cardNumberColumn].value
         costCenter = row[costCenterColumn].value
         matchingAmount = row[matchingAmountColumn].value
         refGL = row[GLColumn].value
+        
 
-        if any(x is None for x in (documentNum,refGL,matchingAmount,costCenter,cardholderName)) is None or costCenter == "#N/A":
+        if checkNone([documentNum,cardNumber,costCenter,matchingAmount,refGL]):
+            # flag for a missing value
             continue
-        if cardholderName == None:
-            continue
+        
+        cardNumber = cardNumber.lstrip("X")
         refGL = refGL[:GL_NUMBER_LENGTH]
-        matchingAmount = int(round(float(matchingAmount)*100))
         costCenter = costCenter[:CC_NUMBER_LENGTH]
-        if not isinstance(documentNum,int):
+
+        try:
+            matchingAmount = int(round(float(matchingAmount) * 100))
+        except (ValueError, TypeError):
+            # flag for invalid matching amount
+            continue
+        
+        try:
             documentNum = int(documentNum)
-        numPeople = numPeople + 1
-
-        
-
-        #suggestedName = "friend"
-        #suggestedName = searchSimilarNames(cardholderName.lower(),libraryCardholder)
-        suggestedName = find_best_match(normalize_name(cardholderName),libraryCardholder)
-        
-        if cardholderName.lower() in libraryCardholder or (suggestedName != None and suggestedName in libraryCardholder):
-            numKnown = numKnown + 1
-        else:
-            # flag for cardholder not in BA Tracking
-            #print(cardholderName)
+        except (ValueError, TypeError):
+            # flag for invalid document number
             continue
 
-        if row[0].row % barUpdatesFreq == 0:
-            remove_progress_bar()
-            place_progress_bar("SAP Extract",20,numPeople,SAPWorksheet.max_row)
+        if costCenter == "#N/A":
+            # flag for a missing cost center
+            continue
+        
+        if documentNum in libraryDocument:
+            purchase = libraryDocument[documentNum]
+        else:
+            purchase = Purchase(documentNum,row[postedAmoungColumn].value,cardNumber)
+            libraryDocument[documentNum] = purchase
+        
+        strand = PurchaseStrand(documentNum,matchingAmount,costCenter,refGL)
+        purchase.add_purchase_strand(strand)
+        
+        if cardNumber not in libraryCard:
+            # flag for form 32 check
+            continue
+        cardsMatched += 1
+
+        card = libraryCard[cardNumber]
+        center = card.get_cost_center(costCenter)
+
+        if center is None:
+            # flag for invalid cost center attributed with card
+            continue
+
+        center.add_purchase_strand(strand)
+        #print(str(center.get_all_purchase_strands()[int(len(center.get_all_purchase_strands()) - 1)].get_amount()))
+
     
     remove_progress_bar()
-    place_progress_bar("SAP Extract",20,SAPWorksheet.max_row,SAPWorksheet.max_row)
+    place_progress_bar("SAP Extract",20,cardsRead,SAPWorksheet.max_row - 1)
     print("\n")
-    print("Hit Rate: " + str(round(numKnown*100/numPeople,3)) + "%")
+    #print("Hit Rate: " + str(round(cardsMatched*100/cardsRead,4)) + "%")
     
 
         
@@ -398,50 +279,57 @@ def main():
         module="openpyxl"
     )
 
-    libraryCardholder = {}
+    libraryFlag = []
+    libraryCard = {}
     libraryDocument = {}
 
 
     print("Enter Blanket Authority Excel Sheet Directory:")
-    path = input()
-    readBASheet(path,libraryCardholder)
+    #path = input()
+    readBASheet("batracking.xlsx",libraryCard,libraryFlag)
     
+
+
     print("Enter QA Transactions (SAP Export) Excel Sheet Folder Directory:")
     path = input()
-    readSAPExport(path,libraryCardholder,libraryDocument)
-    
+    files = [str(f) for f in Path(path).rglob("*.xlsx")]
+
+    print("\n")
+    for file in files:
+        readSAPExport(file,libraryCard,libraryDocument,libraryFlag)
 
 
 
 
+    while True:
+        print("Enter Card Number:")
+        num = input()
 
-    """
-    print("Enter QA Transactions (SAP Export) Excel Sheet Folder Directory:")
-    path = input()
-    readSAPExport(path,libraryGL,libraryCardholder)"""
- 
+        if num == "quit":
+            break
 
-    """
-    script_dir = os.path.dirname(os.path.abspath(__file__))
+        if num == "all":
+            for cardNum in libraryCard:
+                card = libraryCard[cardNum]
+                for costCenter in card.get_all_cost_centers():
+                    if costCenter.get_overbudget():
+                        print(str(cardNum))
+                        break
+                
+                for costCenter in card.get_all_cost_centers():
+                    if not costCenter.get_overbudget():
+                        continue
 
-    for filename in os.listdir(script_dir):
-        if filename.endswith(".xlsx"):
-            
-            
-            full_path = os.path.join(script_dir, filename)
-            print(full_path)
-    
+                    # flag for overbudget cost center
+                    print("   " + str(costCenter.get_number()) + " ($" + str(convert(costCenter.get_total_spent())) + "/$" + str(convert(costCenter.get_budget())) + ")")
 
+        if not num.isdigit() :#or num not in libraryDocument:
+            print("Invalid Document Number.")
+            continue
 
-    people = ["Monique Bakker","Piper-Lynn"]
-    pipersCenters = libraryCardholder[people[0]].get_all_cost_center()
-    for center in pipersCenters:
-        print(center.get_number())
-        for refGL in center.get_all_gl():
-            print("   " + center.get_all_gl()[refGL].get_number())
-    """
+        card = libraryCard[num]
 
-    
+        for costCenter in card.get_all_cost_centers():
+            print("   " + str(costCenter.get_number()) + " ($" + str(convert(costCenter.get_total_spent())) + "/$" + str(convert(costCenter.get_budget())) + ")")
 
 main()
-input()

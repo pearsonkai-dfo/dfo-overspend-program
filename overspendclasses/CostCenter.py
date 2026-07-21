@@ -1,3 +1,5 @@
+from .PurchaseStrand import PurchaseStrand
+
 class CostCenter:
     """
     Represents a single budget allocation from a blanket authority.
@@ -14,6 +16,9 @@ class CostCenter:
 
     def add_approved_gl(self, gl_account: int):
         self.approved_gl_accounts.append(gl_account)
+        
+    def add_purchase_strand(self, strand):
+        self.invoices.append(strand)
 
     def contains_gl(self, gl_number: str):
         return gl_number in self.approved_gl_accounts
@@ -22,10 +27,13 @@ class CostCenter:
         return self.number
 
     def get_budget(self):
-        return budget
+        return self.budget
 
     def get_all_gl(self):
         return self.gl_accounts
+    
+    def get_all_purchase_strands(self):
+        return self.invoices
         
     def get_gl(self, gl_number: str):
         return self.gl_accounts.get(gl_number)
@@ -34,7 +42,8 @@ class CostCenter:
         total = 0
 
         for strand in self.invoices:
-            total += strand.get_amount()
+
+            total += int(strand.get_amount())
 
         return total
 
