@@ -38,12 +38,16 @@ class CostCenter:
     def get_gl(self, gl_number: str):
         return self.gl_accounts.get(gl_number)
 
+    def get_approved_gls(self):
+        return self.approved_gl_accounts
+
     def get_total_spent(self):
         total = 0
 
         for strand in self.invoices:
 
-            total += int(strand.get_amount())
+            if strand.get_gl() in self.approved_gl_accounts:
+                total += int(strand.get_amount())
 
         return total
 

@@ -1,21 +1,26 @@
 import openpyxl
 
-flag_codes = [
-    (101,"Missing Document Number"),
-    (102,"Missing Cardholder Name"),
-    (103,"Missing Cost Center Number"),
-    (104,"Missing Matching Amount"),
-    (105,"Missing GL Account"),
-    (106,"Not Listed Cardholder (Form 32 Expected)"),
-    (107,"Authorized Lower and Higher Budget on BA Tracking"),
+flag_codes = {
+    100: "",
+    101: "Missing Document Number",
+    102: "Missing Card Number",
+    103: "Missing Cardholder Name",
+    104: "Missing Cost Center Number",
+    105: "Missing Matching Amount",
+    106: "Missing GL Account",
+    107: "Authorized Lower and Higher Budget on BA Tracking",
 
-    (201,"No Matching GL Account"),
-    (202,"No Matching Cost Center"),
-    
-    (301,"Overbudget"),
-    (302,"Mismatched Posted And Summed Matching Price"),
-    (303,"Purchase Exceeds $10 000"),
-]
+    201: "Active BA, No Matching GL Account",
+    202: "Active BA, No Matching Cost Center",
+    203: "No BA",
+
+    301: "Overbudget",
+    302: "Mismatched Posted And Summed Matching Price",
+    303: "Purchase Exceeds $10 000",
+
+    401: "Invalid Matching Amount",
+    402: "Invalid Document Number"
+}
 """
 Flag code first letter id:
 1 - Missing information
@@ -41,10 +46,10 @@ class Flag:
 
     def workbook_print(self, OUTWorksheet):
         OUTWorksheet.append([
-            self.number,
-            self.description,
-            self.path,
-            self.row,
-            self.column,
-            self.document
+            str(self.number),
+            str(self.description),
+            str(self.path),
+            str(self.row),
+            str(self.column),
+            str(self.document)
         ])
