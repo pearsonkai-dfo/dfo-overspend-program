@@ -6,12 +6,6 @@ Last Updated: July 27th, 2026
 This program aims to help automate the Department of Fisheries and Oceans Canada financial system, by flagging overbudget cardholders. The program requires at least 1 SAP extract file and a Blanket Authority tracking sheet to run. It's job is to flag cardholders with the Government of Canada who have gone above their authorized budget, alongside flagging other issues or concerns from the SAP extract. 
 
 ### Installation
-Below is a tutorial video on installing, running, and modifying the program. A text guide is also available.
-
-<video width="320" height="240" controls>
-  <source src="OverspendTutorial.mp4" type="OverspendTutorial/mp4">
-  Your browser does not support the video tag
-</video>
 
 This program is run on Python 3.13.1, which can be downloaded from the Software Center application on DFO computers. Ensure you download the Python version that's right for your CPU's architexture (x86 or x86-64).
 
