@@ -19,7 +19,8 @@ flag_codes = {
     303: "Purchase Exceeds $10 000",
 
     401: "Invalid Matching Amount",
-    402: "Invalid Document Number"
+    402: "Invalid Document Number",
+    407: "Unidentified Credit/Debit Transaction"
 }
 """
 Flag code first letter id:

@@ -32,6 +32,7 @@ SAP_COST_CENTER_COLUMN_IDENTIFIER = "Cost Center"
 SAP_GL_COLUMN_IDENTIFIER = "G/L Account"
 SAP_POSTED_AMOUNT_COLUMN_IDENTIFIER = "Transaction Amount"
 SAP_MATCHING_AMOUNT_COLUMN_IDENTIFIER = "Matching Amount"
+SAP_DEBIT_CREDIT_COLUMN_IDENTIFIER = "Transaction Debit/Credit Code"
 
 ##### BLANKET AUTHORITY TRACKING SHEET CONSTANTS #####
 
@@ -83,6 +84,16 @@ def convert(cents):
 
 def checkNone(set):
     return None in set
+
+
+def resolve_matching_amount_for_transaction_code(transaction_code, matching_amount):
+    normalized_code = str(transaction_code).strip().upper() if transaction_code is not None else ""
+
+    if normalized_code == "D":
+        return matching_amount
+    if normalized_code == "C":
+        return -matching_amount
+    return None
 
 
 def readBASheet(path,libraryCard,libraryFlag):
@@ -178,6 +189,7 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
     GLColumn = None
     postedAmoungColumn = None
     matchingAmountColumn = None
+    debitCreditColumn = None
     
     for column in SAPWorksheet.iter_cols():
         if column[0].value == SAP_DOCUMENT_NUMBER_COLUMN_IDENTIFIER:
@@ -198,7 +210,10 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
         elif column[0].value == SAP_MATCHING_AMOUNT_COLUMN_IDENTIFIER:
             matchingAmountColumn = column[0].column - 1
 
-    if checkNone([documentColumn, cardNumberColumn, costCenterColumn, GLColumn, postedAmoungColumn, matchingAmountColumn]):
+        elif column[0].value == SAP_DEBIT_CREDIT_COLUMN_IDENTIFIER:
+            debitCreditColumn = column[0].column - 1
+
+    if checkNone([documentColumn, cardNumberColumn, costCenterColumn, GLColumn, postedAmoungColumn, matchingAmountColumn, debitCreditColumn]):
         print("Could not locate all required columns. Check column identifiers in Python File.")
         return
     
@@ -215,6 +230,7 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
         costCenter = row[costCenterColumn].value
         matchingAmount = row[matchingAmountColumn].value
         refGL = row[GLColumn].value
+        transactionCode = row[debitCreditColumn].value
         
         if documentNum == None:
             # missing document number
@@ -250,8 +266,14 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
             continue
         
         
+        adjustedMatchingAmount = resolve_matching_amount_for_transaction_code(transactionCode, matchingAmount)
+
+        if adjustedMatchingAmount is None:
+            libraryFlag.append(Flag(407,fc[407],path,row[0].row,debitCreditColumn,documentNum))
+            continue
+
         try:
-            matchingAmount = int(round(float(matchingAmount) * 100))
+            matchingAmount = int(round(float(adjustedMatchingAmount) * 100))
         except (ValueError, TypeError):
             # flag for invalid matching amount
             libraryFlag.append(Flag(401,fc[401],path,row[0].row,matchingAmountColumn,documentNum))
