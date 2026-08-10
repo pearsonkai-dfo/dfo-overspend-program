@@ -21,7 +21,7 @@ from overspendclasses import flag_codes as fc
 
 GL_NUMBER_LENGTH = 8
 CC_NUMBER_LENGTH = 6
-
+PERCENT_OVER = 0.75
 
 
 ##### SAP EXPORT SHEET CONSTANTS #####
@@ -166,7 +166,7 @@ def readBASheet(path,libraryCard,libraryFlag):
             if pos == -1:
                 break
 
-            refGL = textGL[pos + len(ACCOUNT_NUM_IDENTIFIER) : pos + len(ACCOUNT_NUM_IDENTIFIER) + GL_NUMBER_LENGTH] # grab 8 digit GL code
+            refGL = str(textGL[pos + len(ACCOUNT_NUM_IDENTIFIER) : pos + len(ACCOUNT_NUM_IDENTIFIER) + GL_NUMBER_LENGTH]) # grab 8 digit GL code
             textGL = textGL[pos + len(ACCOUNT_NUM_IDENTIFIER) + GL_NUMBER_LENGTH :] # delete text up until the next ACCOUNT_NUM_IDENTIFIER
 
             costCenter.add_approved_gl(refGL)
@@ -258,16 +258,22 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
             continue
         
         cardNumber = cardNumber.lstrip("X")
+
         try:
             refGL = int(str(refGL)[:GL_NUMBER_LENGTH])
         except (ValueError, TypeError):
             # flag for invalid GL number
             libraryFlag.append(Flag(106,fc[106],path,row[0].row,GLColumn,documentNum))
             continue
-        
-        costCenter = costCenter[:CC_NUMBER_LENGTH]
 
-        if costCenter[0] == "6" or costCenter[0] == "7":
+        try:
+            costCenter = int(str(costCenter)[:CC_NUMBER_LENGTH])
+        except (ValueError, TypeError):
+            # flag for invalid cost center
+            libraryFlag.append(Flag(104,fc[104],path,row[0].row,costCenterColumn,documentNum))
+            continue
+
+        if str(costCenter)[0] == "6" or str(costCenter)[0] == "7":
             # ignore cost centers starting with 6 or 7; they are CCG
             continue
         
@@ -309,7 +315,7 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
         
         if cardNumber not in libraryCard:
             # flag for form 32 check
-            libraryFlag.append(Flag(203,fc[203] + " (Card Num: " + cardNumber + ")",path,row[0].row,cardNumberColumn,documentNum))
+            libraryFlag.append(Flag(203,str(fc[203]) + " (Card Num: " + str(cardNumber) + ")",path,row[0].row,str(cardNumberColumn),str(documentNum)))
             continue
         else:
             cardsMatched += 1
@@ -320,12 +326,12 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
 
         if center is None:
             # flag for invalid cost center attributed with card
-            libraryFlag.append(Flag(202,fc[202] + " (Card Num: " + cardNumber + ")" + " (CC: " + costCenter + ")",path,row[0].row,costCenterColumn,documentNum))
+            libraryFlag.append(Flag(202,str(fc[202]) + " (Card Num: " + str(cardNumber) + ")" + " (CC: " + str(costCenter) + ")",path,row[0].row,costCenterColumn,documentNum))
             continue
 
-        if refGL not in center.get_approved_gls():
+        if str(refGL) not in center.get_approved_gls():
             # flag for GL not approved for cost center
-            libraryFlag.append(Flag(201,fc[201] + " (Card Num: " + cardNumber + ")" + " (CC: " + costCenter + ")" + " (GL: " + refGL + ")",path,row[0].row,GLColumn,documentNum))
+            libraryFlag.append(Flag(201,str(fc[201]) + " (Card Num: " + str(cardNumber) + ")" + " (CC: " + str(costCenter) + ")" + " (GL: " + str(refGL) + ")",path,row[0].row,GLColumn,documentNum))
             continue
 
         center.add_purchase_strand(strand)
@@ -380,7 +386,7 @@ def main():
         card = libraryCard[cardNum]
         
         for costCenter in card.get_all_cost_centers():
-            if not costCenter.get_overbudget():
+            if not costCenter.get_overbudget(PERCENT_OVER):
                 continue
             
             allDocuments = ""
@@ -473,7 +479,7 @@ def main():
                         break
                 
                 for costCenter in card.get_all_cost_centers():
-                    if not costCenter.get_overbudget():
+                    if not costCenter.get_overbudget(PERCENT_OVER):
                         continue
 
                     # flag for overbudget cost center

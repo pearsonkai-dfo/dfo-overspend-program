@@ -54,5 +54,5 @@ class CostCenter:
     def get_remaining_budget(self):
         return self.budget - self.get_total_spent()
 
-    def get_overbudget(self):
-        return self.get_remaining_budget() < 0
+    def get_overbudget(self, percent_over: float = 1.00):
+        return self.budget * percent_over - self.get_total_spent()

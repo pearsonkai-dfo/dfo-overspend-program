@@ -23,7 +23,8 @@ class Card:
         return self.cost_centers
 
     def get_cost_center(self, cost_center_number: int):
-        if not cost_center_number.isdigit():
+
+        if not str(cost_center_number).isdigit():
             return None
         
         for center in self.cost_centers:
