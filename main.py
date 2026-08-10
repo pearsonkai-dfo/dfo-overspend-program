@@ -78,6 +78,12 @@ def place_progress_bar(bar_name: str, bar_segments: int, items_done: int, items_
     
 ##### FUNCTIONS START #####
 
+def foo(variable):
+    if variable >= 5:
+        return variable - 2
+
+    return variable * 3
+
 def convert(cents):
     return f"{cents // 100}.{cents % 100:02d}"
 
