@@ -393,7 +393,7 @@ def main():
             for purchaseStrand in costCenter.get_all_purchase_strands():
                 if purchaseStrand.get_gl() in costCenter.get_approved_gls():
                     allDocuments += str(purchaseStrand.get_document()) + " (GL: " + str(purchaseStrand.get_gl()) + ") ($" + str(convert(purchaseStrand.get_amount())) + ")\n"
-            libraryFlag.append(Flag(301,fc[301] + " Card: " + cardNum + ", CC: " + str(costCenter.get_number()) + " ($" + str(convert(costCenter.get_total_spent())) + "/$" + str(convert(costCenter.get_budget())) + ")","","","",allDocuments))
+            libraryFlag.append(Flag(301,fc[301] + " Card: " + str(cardNum) + ", CC: " + str(costCenter.get_number()) + " ($" + str(convert(costCenter.get_total_spent())) + "/$" + str(convert(costCenter.get_budget())) + ")","","","",allDocuments))
             
     
     wb = Workbook()
