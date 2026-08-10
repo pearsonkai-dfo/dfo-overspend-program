@@ -21,7 +21,7 @@ from overspendclasses import flag_codes as fc
 
 GL_NUMBER_LENGTH = 8
 CC_NUMBER_LENGTH = 6
-PERCENT_OVER = 0.00
+PERCENT_OVER = 0.75
 
 
 ##### SAP EXPORT SHEET CONSTANTS #####
