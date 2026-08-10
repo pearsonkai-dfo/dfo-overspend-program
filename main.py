@@ -21,7 +21,7 @@ from overspendclasses import flag_codes as fc
 
 GL_NUMBER_LENGTH = 8
 CC_NUMBER_LENGTH = 6
-PERCENT_OVER = 0.75
+PERCENT_OVER = 0.00
 
 
 ##### SAP EXPORT SHEET CONSTANTS #####
@@ -214,7 +214,7 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
             debitCreditColumn = column[0].column - 1
 
     if checkNone([documentColumn, cardNumberColumn, costCenterColumn, GLColumn, postedAmoungColumn, matchingAmountColumn, debitCreditColumn]):
-        print("Could not locate all required columns. Check column identifiers in Python File.")
+        print("Could not locate all required columns. Check column identifiers in the Python File.")
         return
     
     for row in SAPWorksheet.iter_rows(min_row=2):
@@ -226,11 +226,11 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
         cardsRead += 1
 
         documentNum = row[documentColumn].value
-        cardNumber = row[cardNumberColumn].value
-        costCenter = row[costCenterColumn].value
-        matchingAmount = row[matchingAmountColumn].value
-        refGL = row[GLColumn].value
-        transactionCode = row[debitCreditColumn].value
+        cardNumber = str(row[cardNumberColumn].value)
+        costCenter = str(row[costCenterColumn].value)
+        matchingAmount = str(row[matchingAmountColumn].value)
+        refGL = str(row[GLColumn].value)
+        transactionCode = str(row[debitCreditColumn].value)
         
         if documentNum == None:
             # missing document number
@@ -247,12 +247,12 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
             libraryFlag.append(Flag(104,fc[104],path,row[0].row,costCenterColumn,documentNum))
             continue
 
-        if matchingAmount == None:
+        if matchingAmount == None or matchingAmount == "":
             # missing matching amount
             libraryFlag.append(Flag(105,fc[105],path,row[0].row,matchingAmountColumn,documentNum))
             continue
 
-        if refGL == None:
+        if refGL == None or refGL == "":
             # missing GL number
             libraryFlag.append(Flag(106,fc[106],path,row[0].row,GLColumn,documentNum))
             continue

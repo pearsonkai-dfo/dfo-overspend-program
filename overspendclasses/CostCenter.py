@@ -46,13 +46,15 @@ class CostCenter:
 
         for strand in self.invoices:
 
-            if strand.get_gl() in self.approved_gl_accounts:
+            if int(strand.get_gl()) in self.approved_gl_accounts:
+                total += int(strand.get_amount())
+            elif str(strand.get_gl()) in self.approved_gl_accounts:
                 total += int(strand.get_amount())
 
         return total
 
-    def get_remaining_budget(self):
-        return self.budget - self.get_total_spent()
+    def get_remaining_budget(self, percent_over: float = 1.00):
+        return self.budget * percent_over - self.get_total_spent()
 
     def get_overbudget(self, percent_over: float = 1.00):
-        return self.budget * percent_over - self.get_total_spent()
+        return self.get_remaining_budget(percent_over) <= 0
