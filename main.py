@@ -1,5 +1,5 @@
 from time import sleep
-
+import numbers
 import openpyxl
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
@@ -258,7 +258,13 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
             continue
         
         cardNumber = cardNumber.lstrip("X")
-        refGL = refGL[:GL_NUMBER_LENGTH]
+        try:
+            refGL = int(str(refGL)[:GL_NUMBER_LENGTH])
+        except (ValueError, TypeError):
+            # flag for invalid GL number
+            libraryFlag.append(Flag(106,fc[106],path,row[0].row,GLColumn,documentNum))
+            continue
+        
         costCenter = costCenter[:CC_NUMBER_LENGTH]
 
         if costCenter[0] == "6" or costCenter[0] == "7":

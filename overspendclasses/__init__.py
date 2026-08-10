@@ -1,4 +1,3 @@
-from .Cardholder import Cardholder
 from .Card import Card
 from .CostCenter import CostCenter
 from .Purchase import Purchase
