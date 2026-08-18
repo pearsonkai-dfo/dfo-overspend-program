@@ -16,7 +16,7 @@ flag_codes = {
 
     301: "Overbudget",
     302: "Mismatched Posted And Summed Matching Price",
-    303: "Purchase Exceeds $10 000",
+    303: "Purchase Exceeds $10 000", # remove these
 
     401: "Invalid Matching Amount",
     402: "Invalid Document Number",
