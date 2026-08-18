@@ -4,11 +4,12 @@ class PurchaseStrand:
 
     A purchase requires at least one purchase strand. 
     """
-    def __init__(self,document: int, amount: int, cost_center: int, gl: int):
+    def __init__(self,document: int, amount: int, cost_center: int, gl: int, name: str):
         self.document = document
         self.amount : int = amount
         self.cost_center = cost_center
         self.gl = gl
+        self.name = name
 
     def get_document(self):
         return self.document
@@ -21,3 +22,6 @@ class PurchaseStrand:
 
     def get_gl(self):
         return self.gl
+
+    def get_name(self):
+        return self.name

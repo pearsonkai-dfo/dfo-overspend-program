@@ -1,4 +1,4 @@
-from time import sleep
+﻿from time import sleep
 import numbers
 import openpyxl
 from openpyxl import Workbook
@@ -33,6 +33,7 @@ SAP_GL_COLUMN_IDENTIFIER = "G/L Account"
 SAP_POSTED_AMOUNT_COLUMN_IDENTIFIER = "Transaction Amount"
 SAP_MATCHING_AMOUNT_COLUMN_IDENTIFIER = "Matching Amount"
 SAP_DEBIT_CREDIT_COLUMN_IDENTIFIER = "Transaction Debit/Credit Code"
+SAP_CARDHOLDER_NAME_COLUMN_IDENTIFIER = "Cardholder Name"
 
 ##### BLANKET AUTHORITY TRACKING SHEET CONSTANTS #####
 
@@ -191,6 +192,7 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
     
     documentColumn = None
     cardNumberColumn = None
+    cardholderNameColumn = None
     costCenterColumn = None
     GLColumn = None
     postedAmoungColumn = None
@@ -219,7 +221,10 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
         elif column[0].value == SAP_DEBIT_CREDIT_COLUMN_IDENTIFIER:
             debitCreditColumn = column[0].column - 1
 
-    if checkNone([documentColumn, cardNumberColumn, costCenterColumn, GLColumn, postedAmoungColumn, matchingAmountColumn, debitCreditColumn]):
+        elif column[0].value == SAP_CARDHOLDER_NAME_COLUMN_IDENTIFIER:
+            cardholderNameColumn = column[0].column - 1
+
+    if checkNone([documentColumn, cardNumberColumn, costCenterColumn, GLColumn, postedAmoungColumn, cardholderNameColumn, matchingAmountColumn, debitCreditColumn]):
         print("Could not locate all required columns. Check column identifiers in the Python File.")
         return
     
@@ -236,6 +241,7 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
         costCenter = str(row[costCenterColumn].value)
         matchingAmount = str(row[matchingAmountColumn].value)
         refGL = str(row[GLColumn].value)
+        cardholderName = str(row[cardholderNameColumn].value)
         transactionCode = str(row[debitCreditColumn].value)
         
         if documentNum == None:
@@ -316,7 +322,7 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
             # flag for over $10000
             #libraryFlag.append(Flag(303,fc[303],path,row[0].row,matchingAmountColumn,documentNum))
         
-        strand = PurchaseStrand(documentNum,matchingAmount,costCenter,refGL)
+        strand = PurchaseStrand(documentNum,matchingAmount,costCenter,refGL,cardholderName)
         purchase.add_purchase_strand(strand)
         
         if cardNumber not in libraryCard:
@@ -434,27 +440,156 @@ def main():
         cell.font = header_font
         cell.alignment = header_alignment
 
-
     for flag in libraryFlag:
         flag.workbook_print(ws)
+
+    def safe_text(value):
+        if value is None:
+            return ""
+        return str(value).strip()
+
+    def safe_money_cents(value):
+        if value is None:
+            return ""
+
+        try:
+            if isinstance(value, (int, float)):
+                return str(convert(int(round(float(value)))))
+
+            text = safe_text(value).replace(",", "").replace("$", "").replace("€", "")
+            if text in {"", "#N/A", "N/A", "nan"}:
+                return ""
+            numeric_value = float(text)
+            return str(convert(int(round(numeric_value * 100))))
+        except (TypeError, ValueError):
+            return ""
+
+    for cardNum in libraryCard:
+        card = libraryCard[cardNum]
+        overbudget_cost_centers = [cost_center for cost_center in card.get_all_cost_centers() if cost_center.get_overbudget(PERCENT_OVER)]
+
+        if not overbudget_cost_centers:
+            continue
+
+        detail_ws = wb.create_sheet(title=safe_text(cardNum))
+        detail_ws.column_dimensions["A"].width = 18
+        detail_ws.column_dimensions["B"].width = 18
+        detail_ws.column_dimensions["C"].width = 18
+        detail_ws.column_dimensions["D"].width = 18
+        detail_ws.column_dimensions["E"].width = 18
+        detail_ws.column_dimensions["F"].width = 18
+        detail_ws.column_dimensions["G"].width = 18
+        detail_ws.column_dimensions["H"].width = 18
+        detail_ws.column_dimensions["I"].width = 18
+        detail_ws.column_dimensions["J"].width = 18
+        detail_ws.column_dimensions["K"].width = 18
+        detail_ws.column_dimensions["L"].width = 18
+        detail_ws.column_dimensions["M"].width = 18
+        detail_ws.column_dimensions["N"].width = 18
+
+        try:
+            total_spent = int(card.get_total_spent())
+        except (TypeError, ValueError):
+            total_spent = 0
+
+        budget_total = 0
+        for cost_center in card.get_all_cost_centers():
+            try:
+                budget_total += int(cost_center.get_budget())
+            except (TypeError, ValueError):
+                continue
+
+        metadata_fill = PatternFill(fill_type="solid", fgColor="1F3B75")
+        metadata_font = Font(color="FFFFFF", bold=True)
+        remaining_budget_total = 0
+        for cost_center in card.get_all_cost_centers():
+            try:
+                remaining_budget_total += int(cost_center.get_remaining_budget(PERCENT_OVER))
+            except (TypeError, ValueError):
+                continue
+
+        detail_ws.append([
+            "Card Number: " + safe_text(cardNum),
+            "Total Spent: " + safe_money_cents(total_spent),
+            "Budget: " + safe_money_cents(budget_total),
+            "Remaining Budget: " + safe_money_cents(remaining_budget_total),
+            "Overbudget Cost Centers: " + ", ".join(safe_text(cost_center.get_number()) for cost_center in overbudget_cost_centers),
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+            "",
+        ])
+
+        for cell in detail_ws[detail_ws.max_row]:
+            cell.fill = metadata_fill
+            cell.font = metadata_font
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        for cost_center in overbudget_cost_centers:
+            detail_ws.append([])
+            detail_ws.append(["Cost Center: " + safe_text(cost_center.get_number()), "", "", "", "", "", "", "", "", "", "", "", "", ""])
+            header_row = ["Document Number", "G/L Account", "Posting Date", "Transaction Date", "Fund", "Cardholder Name", "Supplier Name", "CC Manager", "Transaction Amount", "Posted Amount", "", "", "", ""]
+            detail_ws.append(header_row)
+
+            for cell in detail_ws[detail_ws.max_row]:
+                cell.fill = PatternFill(fill_type="solid", fgColor="4472C4")
+                cell.font = Font(color="FFFFFF", bold=True)
+                cell.alignment = Alignment(horizontal="center", vertical="center")
+
+            for strand in cost_center.get_all_purchase_strands():
+                purchase = libraryDocument.get(str(strand.get_document()))
+                posted_amount = safe_money_cents(purchase.get_posted_amount()) if purchase is not None else ""
+                purchase_metadata = purchase if purchase is not None else None
+
+                try:
+                    strand_amount = int(strand.get_amount())
+                except (TypeError, ValueError):
+                    strand_amount = 0
+
+                row_values = [
+                    safe_text(strand.get_document()),
+                    safe_text(strand.get_gl()),
+                    safe_text(getattr(purchase_metadata, "posting_date", None) if purchase_metadata is not None else None),
+                    safe_text(getattr(purchase_metadata, "transaction_date", None) if purchase_metadata is not None else None),
+                    safe_text(getattr(purchase_metadata, "fund", None) if purchase_metadata is not None else None),
+                    safe_text(strand.get_name()),
+                    safe_text(getattr(purchase_metadata, "supplier_name", None) if purchase_metadata is not None else None),
+                    safe_text(getattr(purchase_metadata, "cc_manager", None) if purchase_metadata is not None else None),
+                    safe_money_cents(strand_amount),
+                    posted_amount,
+                    "",
+                    "",
+                    "",
+                    "",
+                ]
+                detail_ws.append(row_values)
+
+        for row in detail_ws.iter_rows():
+            for cell in row:
+                if cell.value is None:
+                    cell.value = ""
+                if cell.value != "":
+                    cell.alignment = Alignment(wrap_text=True)
+
+        detail_ws.freeze_panes = "A2"
 
     for row in ws.iter_rows():
         max_lines = 1
 
         for cell in row:
             if cell.value:
-                # Enable wrapping
                 cell.alignment = Alignment(wrap_text=True)
-
-                # Estimate lines based on column width
                 col_width = ws.column_dimensions[cell.column_letter].width or 10
-
                 text = str(cell.value)
                 estimated_lines = math.ceil(len(text) / col_width)
-
                 max_lines = max(max_lines, estimated_lines)
 
-        # Approx. 16 points per line
         ws.row_dimensions[cell.row].height = max_lines * 16
 
     ws.auto_filter.ref = ws.dimensions
