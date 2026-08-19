@@ -499,6 +499,15 @@ def main():
         if not overbudget_cost_centers:
             continue
 
+        if len(overbudget_cost_centers) == 1:
+            try:
+                only_overbudget_cc = int(overbudget_cost_centers[0].get_number())
+            except (TypeError, ValueError):
+                only_overbudget_cc = None
+
+            if only_overbudget_cc is not None and 600000 <= only_overbudget_cc <= 750000:
+                continue
+
         detail_ws = wb.create_sheet(title=safe_text(cardNum))
         detail_ws.column_dimensions["A"].width = 18
         detail_ws.column_dimensions["B"].width = 18
