@@ -6,6 +6,7 @@ from openpyxl.styles import Font, PatternFill, Alignment
 import warnings
 from pathlib import Path 
 import math
+from datetime import datetime, timedelta
 
 #from decimal import Decimal
 
@@ -87,7 +88,19 @@ def foo(variable):
     return variable * 3
 
 def convert(cents):
-    return f"{cents // 100}.{cents % 100:02d}"
+    return "$" + f"{cents // 100}.{cents % 100:02d}"
+
+def excel_serial_to_date(serial):
+    if serial is None:
+        return ""
+
+    try:
+        return (
+            datetime(1899, 12, 30)
+            + timedelta(days=float(serial))
+        ).strftime("%m/%d/%Y")
+    except (ValueError, TypeError):
+        return ""
 
 
 def checkNone(set):
@@ -274,6 +287,9 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
             # missing GL number
             libraryFlag.append(Flag(106,fc[106],path,row[0].row,GLColumn,documentNum))
             continue
+
+        if postedDate == None:
+            continue
         
         cardNumber = cardNumber.lstrip("X")
 
@@ -291,7 +307,9 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
             libraryFlag.append(Flag(104,fc[104],path,row[0].row,costCenterColumn,documentNum))
             continue
 
-        if str(costCenter)[0] == "6" or str(costCenter)[0] == "7":
+        try:
+            postedDate = str(postedDate)
+        except str(costCenter)[0] == "6" or str(costCenter)[0] == "7":
             # ignore cost centers starting with 6 or 7; they are CCG
             continue
         
@@ -413,6 +431,8 @@ def main():
                     allDocuments += str(purchaseStrand.get_document()) + " (GL: " + str(purchaseStrand.get_gl()) + ") ($" + str(convert(purchaseStrand.get_amount())) + ")\n"
             libraryFlag.append(Flag(301,fc[301] + " Card: " + str(cardNum) + ", CC: " + str(costCenter.get_number()) + " ($" + str(convert(costCenter.get_total_spent())) + "/$" + str(convert(costCenter.get_budget())) + ")","","","",allDocuments))
             
+
+    print("!WARNING! Output file is being constructed. Please wait before closing the program.")
     
     wb = Workbook()
     ws = wb.active
@@ -563,7 +583,7 @@ def main():
                 row_values = [
                     safe_text(strand.get_document()),
                     safe_text(strand.get_gl()),
-                    safe_text(strand.get_posted_date()),
+                    excel_serial_to_date(strand.get_posted_date()),
                     safe_text(getattr(purchase_metadata, "transaction_date", None) if purchase_metadata is not None else None),
                     safe_text(getattr(purchase_metadata, "fund", None) if purchase_metadata is not None else None),
                     safe_text(strand.get_name()),
@@ -578,6 +598,8 @@ def main():
                 ]
                 detail_ws.append(row_values)
 
+        
+
         for row in detail_ws.iter_rows():
             for cell in row:
                 if cell.value is None:
@@ -585,6 +607,12 @@ def main():
                 if cell.value != "":
                     cell.alignment = Alignment(wrap_text=True)
 
+        for row in detail_ws.iter_rows():
+            for cell in row:
+
+                if isinstance(cell.value, (int, float)):
+                    cell.number_format = "$#,##0.00"
+                
         detail_ws.freeze_panes = "A2"
 
     for row in ws.iter_rows():
@@ -603,7 +631,7 @@ def main():
     ws.auto_filter.ref = ws.dimensions
     wb.save("OverspendOutput.xlsx")
 
-
+    print("You can now safely close the program.\n")
 
 
 
