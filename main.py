@@ -447,6 +447,8 @@ def main():
         cell.alignment = header_alignment
 
     for flag in libraryFlag:
+        if str(flag.get_code())[0] == "1": # skip if flag code starts with 1
+            continue
         flag.workbook_print(ws)
 
     def safe_text(value):

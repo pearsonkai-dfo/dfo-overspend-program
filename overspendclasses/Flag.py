@@ -54,3 +54,6 @@ class Flag:
             str(self.column),
             str(self.document)
         ])
+
+    def get_code(self):
+        return self.number
