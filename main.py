@@ -34,6 +34,7 @@ SAP_POSTED_AMOUNT_COLUMN_IDENTIFIER = "Transaction Amount"
 SAP_MATCHING_AMOUNT_COLUMN_IDENTIFIER = "Matching Amount"
 SAP_DEBIT_CREDIT_COLUMN_IDENTIFIER = "Transaction Debit/Credit Code"
 SAP_CARDHOLDER_NAME_COLUMN_IDENTIFIER = "Cardholder Name"
+SAP_POSTED_DATE_COLUMN_IDENTIFIER = "Posting Date"
 
 ##### BLANKET AUTHORITY TRACKING SHEET CONSTANTS #####
 
@@ -193,6 +194,7 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
     documentColumn = None
     cardNumberColumn = None
     cardholderNameColumn = None
+    postedDateColumn = None
     costCenterColumn = None
     GLColumn = None
     postedAmoungColumn = None
@@ -224,7 +226,10 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
         elif column[0].value == SAP_CARDHOLDER_NAME_COLUMN_IDENTIFIER:
             cardholderNameColumn = column[0].column - 1
 
-    if checkNone([documentColumn, cardNumberColumn, costCenterColumn, GLColumn, postedAmoungColumn, cardholderNameColumn, matchingAmountColumn, debitCreditColumn]):
+        elif column[0].value == SAP_POSTED_DATE_COLUMN_IDENTIFIER:
+            postedDateColumn = column[0].column - 1
+
+    if checkNone([documentColumn, cardNumberColumn, costCenterColumn, GLColumn, postedAmoungColumn, cardholderNameColumn, matchingAmountColumn, debitCreditColumn, postedDateColumn]):
         print("Could not locate all required columns. Check column identifiers in the Python File.")
         return
     
@@ -242,6 +247,7 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
         matchingAmount = str(row[matchingAmountColumn].value)
         refGL = str(row[GLColumn].value)
         cardholderName = str(row[cardholderNameColumn].value)
+        postedDate = row[postedDateColumn].value
         transactionCode = str(row[debitCreditColumn].value)
         
         if documentNum == None:
@@ -322,7 +328,7 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
             # flag for over $10000
             #libraryFlag.append(Flag(303,fc[303],path,row[0].row,matchingAmountColumn,documentNum))
         
-        strand = PurchaseStrand(documentNum,matchingAmount,costCenter,refGL,cardholderName)
+        strand = PurchaseStrand(documentNum, matchingAmount, costCenter, refGL, cardholderName, postedDate)
         purchase.add_purchase_strand(strand)
         
         if cardNumber not in libraryCard:
@@ -555,7 +561,7 @@ def main():
                 row_values = [
                     safe_text(strand.get_document()),
                     safe_text(strand.get_gl()),
-                    safe_text(getattr(purchase_metadata, "posting_date", None) if purchase_metadata is not None else None),
+                    safe_text(strand.get_posted_date()),
                     safe_text(getattr(purchase_metadata, "transaction_date", None) if purchase_metadata is not None else None),
                     safe_text(getattr(purchase_metadata, "fund", None) if purchase_metadata is not None else None),
                     safe_text(strand.get_name()),
