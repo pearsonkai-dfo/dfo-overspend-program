@@ -343,7 +343,7 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
         
 
         #if matchingAmount > 10000 * 100:
-            # flag for over $10000
+            # flag for over 10000
             #libraryFlag.append(Flag(303,fc[303],path,row[0].row,matchingAmountColumn,documentNum))
         
         strand = PurchaseStrand(documentNum, matchingAmount, costCenter, refGL, cardholderName, postedDate)
@@ -414,8 +414,8 @@ def main():
 
     for purchaseKey in libraryDocument: 
         if libraryDocument[purchaseKey].get_calculated_total() > 10000 * 100:
-            # flag for over $10000
-            libraryFlag.append(Flag(303,fc[303] + " ($" + str(convert(libraryDocument[purchaseKey].get_calculated_total())) + ")",path,"","",libraryDocument[purchaseKey].get_document()))
+            # flag for over 10000
+            libraryFlag.append(Flag(303,fc[303] + " (" + str(convert(libraryDocument[purchaseKey].get_calculated_total())) + ")",path,"","",libraryDocument[purchaseKey].get_document()))
 
 
     for cardNum in libraryCard:
@@ -428,8 +428,8 @@ def main():
             allDocuments = ""
             for purchaseStrand in costCenter.get_all_purchase_strands():
                 if purchaseStrand.get_gl() in costCenter.get_approved_gls():
-                    allDocuments += str(purchaseStrand.get_document()) + " (GL: " + str(purchaseStrand.get_gl()) + ") ($" + str(convert(purchaseStrand.get_amount())) + ")\n"
-            libraryFlag.append(Flag(301,fc[301] + " Card: " + str(cardNum) + ", CC: " + str(costCenter.get_number()) + " ($" + str(convert(costCenter.get_total_spent())) + "/$" + str(convert(costCenter.get_budget())) + ")","","","",allDocuments))
+                    allDocuments += str(purchaseStrand.get_document()) + " (GL: " + str(purchaseStrand.get_gl()) + ") (" + str(convert(purchaseStrand.get_amount())) + ")\n"
+            libraryFlag.append(Flag(301,fc[301] + " Card: " + str(cardNum) + ", CC: " + str(costCenter.get_number()) + " (" + str(convert(costCenter.get_total_spent())) + "/" + str(convert(costCenter.get_budget())) + ")","","","",allDocuments))
             
 
     print("!WARNING! Output file is being constructed. Please wait before closing the program.")
@@ -484,7 +484,7 @@ def main():
             if isinstance(value, (int, float)):
                 return str(convert(int(round(float(value)))))
 
-            text = safe_text(value).replace(",", "").replace("$", "").replace("€", "")
+            text = safe_text(value).replace(",", "").replace("", "").replace("€", "")
             if text in {"", "#N/A", "N/A", "nan"}:
                 return ""
             numeric_value = float(text)
@@ -620,7 +620,7 @@ def main():
             for cell in row:
 
                 if isinstance(cell.value, (int, float)):
-                    cell.number_format = "$#,##0.00"
+                    cell.number_format = "#,##0.00"
                 
         detail_ws.freeze_panes = "A2"
 
@@ -669,10 +669,10 @@ def main():
                         continue
 
                     # flag for overbudget cost center
-                    print("   " + str(costCenter.get_number()) + " ($" + str(convert(costCenter.get_total_spent())) + "/$" + str(convert(costCenter.get_budget())) + ")")
+                    print("   " + str(costCenter.get_number()) + " (" + str(convert(costCenter.get_total_spent())) + "/" + str(convert(costCenter.get_budget())) + ")")
 
                     for strand in costCenter.get_all_purchase_strands():
-                        print("      " + str(strand.get_document()) + " (GL: " + str(strand.get_gl_account()) + ") ($" + str(convert(strand.get_amount())) + ")")
+                        print("      " + str(strand.get_document()) + " (GL: " + str(strand.get_gl_account()) + ") (" + str(convert(strand.get_amount())) + ")")
             continue
 
         if not num.isdigit() :#or num not in libraryDocument:
@@ -682,6 +682,6 @@ def main():
         card = libraryCard[num]
 
         for costCenter in card.get_all_cost_centers():
-            print("   " + str(costCenter.get_number()) + " ($" + str(convert(costCenter.get_total_spent())) + "/$" + str(convert(costCenter.get_budget())) + ")")
+            print("   " + str(costCenter.get_number()) + " (" + str(convert(costCenter.get_total_spent())) + "/" + str(convert(costCenter.get_budget())) + ")")
 
 main()
