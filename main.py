@@ -7,6 +7,8 @@ import warnings
 from pathlib import Path 
 import math
 from datetime import datetime, timedelta
+import msvcrt
+
 
 #from decimal import Decimal
 
@@ -36,6 +38,9 @@ SAP_MATCHING_AMOUNT_COLUMN_IDENTIFIER = "Matching Amount"
 SAP_DEBIT_CREDIT_COLUMN_IDENTIFIER = "Transaction Debit/Credit Code"
 SAP_CARDHOLDER_NAME_COLUMN_IDENTIFIER = "Cardholder Name"
 SAP_POSTED_DATE_COLUMN_IDENTIFIER = "Posting Date"
+SAP_SUPPLIER_COLUMN_IDENTIFIER = "Supplier Name"
+SAP_TRANSACTION_DATE_COLUMN_IDENTIFIER = "Transaction Date"
+SAP_FUND_COLUMN_IDENTIFIER = "Fund"
 
 ##### BLANKET AUTHORITY TRACKING SHEET CONSTANTS #####
 
@@ -213,6 +218,9 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
     postedAmoungColumn = None
     matchingAmountColumn = None
     debitCreditColumn = None
+    supplierColumn = None
+    transactionDateColumn = None
+    fundColumn = None
     
     for column in SAPWorksheet.iter_cols():
         if column[0].value == SAP_DOCUMENT_NUMBER_COLUMN_IDENTIFIER:
@@ -241,8 +249,14 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
 
         elif column[0].value == SAP_POSTED_DATE_COLUMN_IDENTIFIER:
             postedDateColumn = column[0].column - 1
+        elif column[0].value == SAP_SUPPLIER_COLUMN_IDENTIFIER:
+            supplierColumn = column[0].column - 1
+        elif column[0].value == SAP_TRANSACTION_DATE_COLUMN_IDENTIFIER:
+            transactionDateColumn = column[0].column - 1
+        elif column[0].value == SAP_FUND_COLUMN_IDENTIFIER:
+            fundColumn = column[0].column - 1
 
-    if checkNone([documentColumn, cardNumberColumn, costCenterColumn, GLColumn, postedAmoungColumn, cardholderNameColumn, matchingAmountColumn, debitCreditColumn, postedDateColumn]):
+    if checkNone([documentColumn, cardNumberColumn, costCenterColumn, GLColumn, postedAmoungColumn, cardholderNameColumn, matchingAmountColumn, debitCreditColumn, postedDateColumn, supplierColumn, transactionDateColumn, fundColumn]):
         print("Could not locate all required columns. Check column identifiers in the Python File.")
         return
     
@@ -261,6 +275,9 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
         refGL = str(row[GLColumn].value)
         cardholderName = str(row[cardholderNameColumn].value)
         postedDate = row[postedDateColumn].value
+        supplierName = row[supplierColumn].value if supplierColumn is not None else None
+        transactionDate = row[transactionDateColumn].value if transactionDateColumn is not None else None
+        fund = row[fundColumn].value if fundColumn is not None else None
         transactionCode = str(row[debitCreditColumn].value)
         
         if documentNum == None:
@@ -346,7 +363,7 @@ def readSAPExport(path,libraryCard,libraryDocument,libraryFlag):
             # flag for over 10000
             #libraryFlag.append(Flag(303,fc[303],path,row[0].row,matchingAmountColumn,documentNum))
         
-        strand = PurchaseStrand(documentNum, matchingAmount, costCenter, refGL, cardholderName, postedDate)
+        strand = PurchaseStrand(documentNum, matchingAmount, costCenter, refGL, cardholderName, postedDate, transactionDate, fund, supplierName)
         purchase.add_purchase_strand(strand)
         
         if cardNumber not in libraryCard:
@@ -436,7 +453,7 @@ def main():
     
     wb = Workbook()
     ws = wb.active
-    ws.title = "output"
+    ws.title = "Flagged Transactions"
     ws.column_dimensions["A"].width = 12  # Flag Code
     ws.column_dimensions["B"].width = 55  # Description
     ws.column_dimensions["C"].width = 65  # File Path
@@ -509,15 +526,15 @@ def main():
                 continue
 
         detail_ws = wb.create_sheet(title=safe_text(cardNum))
-        detail_ws.column_dimensions["A"].width = 18
-        detail_ws.column_dimensions["B"].width = 18
-        detail_ws.column_dimensions["C"].width = 18
-        detail_ws.column_dimensions["D"].width = 18
+        detail_ws.column_dimensions["A"].width = 12
+        detail_ws.column_dimensions["B"].width = 15
+        detail_ws.column_dimensions["C"].width = 6
+        detail_ws.column_dimensions["D"].width = 12
         detail_ws.column_dimensions["E"].width = 18
         detail_ws.column_dimensions["F"].width = 18
         detail_ws.column_dimensions["G"].width = 18
-        detail_ws.column_dimensions["H"].width = 18
-        detail_ws.column_dimensions["I"].width = 18
+        detail_ws.column_dimensions["H"].width = 20
+        detail_ws.column_dimensions["I"].width = 25
         detail_ws.column_dimensions["J"].width = 18
         detail_ws.column_dimensions["K"].width = 18
         detail_ws.column_dimensions["L"].width = 18
@@ -570,8 +587,19 @@ def main():
 
         for cost_center in overbudget_cost_centers:
             detail_ws.append([])
-            detail_ws.append(["Cost Center: " + safe_text(cost_center.get_number()), "", "", "", "", "", "", "", "", "", "", "", "", ""])
-            header_row = ["Document Number", "G/L Account", "Posting Date", "Transaction Date", "Fund", "Cardholder Name", "Supplier Name", "CC Manager", "Transaction Amount", "Posted Amount", "", "", "", ""]
+            detail_ws.append(["CC: " + safe_text(cost_center.get_number()), "", "", "", "", "", "", "", "", "", "", "", "", ""])
+            header_row = [
+                "Document",
+                "GL Number",
+                "Fund",
+                "Cost Center",
+                "Posting Date",
+                "Transaction Date",
+                "Matching Amount",
+                "Cardholder Name",
+                "Supplier Name",
+                "CC Manager",
+            ]
             detail_ws.append(header_row)
 
             for cell in detail_ws[detail_ws.max_row]:
@@ -592,18 +620,14 @@ def main():
                 row_values = [
                     safe_text(strand.get_document()),
                     safe_text(strand.get_gl()),
+                    safe_text(strand.get_fund()),
+                    safe_text(strand.get_cost_center()),
                     excel_serial_to_date(strand.get_posted_date()),
-                    safe_text(getattr(purchase_metadata, "transaction_date", None) if purchase_metadata is not None else None),
-                    safe_text(getattr(purchase_metadata, "fund", None) if purchase_metadata is not None else None),
-                    safe_text(strand.get_name()),
-                    safe_text(getattr(purchase_metadata, "supplier_name", None) if purchase_metadata is not None else None),
-                    safe_text(getattr(purchase_metadata, "cc_manager", None) if purchase_metadata is not None else None),
+                    excel_serial_to_date(strand.get_transaction_date()),
                     safe_money_cents(strand_amount),
-                    posted_amount,
-                    "",
-                    "",
-                    "",
-                    "",
+                    safe_text(strand.get_name()),
+                    safe_text(strand.get_supplier()),
+                    safe_text(getattr(purchase_metadata, "cc_manager", None) if purchase_metadata is not None else None),
                 ]
                 detail_ws.append(row_values)
 
@@ -642,9 +666,10 @@ def main():
 
     print("You can now safely close the program.\n")
 
+    print("Type any key to close.")
+    msvcrt.getch()
 
-
-
+    """
     while True:
         print("Enter Card Number:")
         num = input()
@@ -683,5 +708,5 @@ def main():
 
         for costCenter in card.get_all_cost_centers():
             print("   " + str(costCenter.get_number()) + " (" + str(convert(costCenter.get_total_spent())) + "/" + str(convert(costCenter.get_budget())) + ")")
-
+    """
 main()
