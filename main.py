@@ -95,11 +95,36 @@ def foo(variable):
     return variable * 3
 
 def convert(cents):
-    return "$" + f"{cents // 100}.{cents % 100:02d}"
+    cents = int(cents)
+    sign = "-" if cents < 0 else ""
+    cents = abs(cents)
+    return f"{sign}${cents // 100}.{cents % 100:02d}"
 
 def excel_serial_to_date(serial):
-    if serial is None:
+    if serial is None or serial == "":
         return ""
+
+    if isinstance(serial, datetime):
+        return serial.strftime("%m/%d/%Y")
+
+    if hasattr(serial, "year") and hasattr(serial, "month") and hasattr(serial, "day"):
+        return serial.strftime("%m/%d/%Y")
+
+    if isinstance(serial, str):
+        text = serial.strip()
+        if text in {"", "#N/A", "N/A", "nan"}:
+            return ""
+
+        for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d"):
+            try:
+                return datetime.strptime(text, fmt).strftime("%m/%d/%Y")
+            except ValueError:
+                pass
+
+        try:
+            return excel_serial_to_date(float(text))
+        except ValueError:
+            return text
 
     try:
         return (
@@ -117,10 +142,23 @@ def checkNone(set):
 def resolve_matching_amount_for_transaction_code(transaction_code, matching_amount):
     normalized_code = str(transaction_code).strip().upper() if transaction_code is not None else ""
 
+    # Normalize and parse matching_amount into a float if possible.
+    if matching_amount is None:
+        return None
+
+    try:
+        # Remove common currency characters and thousands separators
+        amt_text = str(matching_amount).replace(",", "").replace("$", "").replace("€", "").strip()
+        if amt_text in {"", "#N/A", "N/A", "nan"}:
+            return None
+        amt = float(amt_text)
+    except (ValueError, TypeError):
+        return None
+
     if normalized_code == "D":
-        return matching_amount
+        return amt
     if normalized_code == "C":
-        return -matching_amount
+        return -amt
     return None
 
 
@@ -528,12 +566,12 @@ def main():
                 continue
 
         detail_ws = wb.create_sheet(title=safe_text(cardNum))
-        detail_ws.column_dimensions["A"].width = 12
-        detail_ws.column_dimensions["B"].width = 15
-        detail_ws.column_dimensions["C"].width = 6
-        detail_ws.column_dimensions["D"].width = 12
-        detail_ws.column_dimensions["E"].width = 18
-        detail_ws.column_dimensions["F"].width = 18
+        detail_ws.column_dimensions["A"].width = 20
+        detail_ws.column_dimensions["B"].width = 18
+        detail_ws.column_dimensions["C"].width = 16
+        detail_ws.column_dimensions["D"].width = 18
+        detail_ws.column_dimensions["E"].width = 24
+        detail_ws.column_dimensions["F"].width = 24
         detail_ws.column_dimensions["G"].width = 18
         detail_ws.column_dimensions["H"].width = 20
         detail_ws.column_dimensions["I"].width = 25

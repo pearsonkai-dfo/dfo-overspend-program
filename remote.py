@@ -117,10 +117,21 @@ def checkNone(set):
 def resolve_matching_amount_for_transaction_code(transaction_code, matching_amount):
     normalized_code = str(transaction_code).strip().upper() if transaction_code is not None else ""
 
+    if matching_amount is None:
+        return None
+
+    try:
+        amt_text = str(matching_amount).replace(",", "").replace("$", "").replace("€", "").strip()
+        if amt_text in {"", "#N/A", "N/A", "nan"}:
+            return None
+        amt = float(amt_text)
+    except (ValueError, TypeError):
+        return None
+
     if normalized_code == "D":
-        return matching_amount
+        return amt
     if normalized_code == "C":
-        return -matching_amount
+        return -amt
     return None
 
 
