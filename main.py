@@ -115,7 +115,7 @@ def excel_serial_to_date(serial):
         if text in {"", "#N/A", "N/A", "nan"}:
             return ""
 
-        for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y", "%d/%m/%Y", "%d-%m-%Y", "%Y/%m/%d"):
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %H:%M", "%m/%d/%Y", "%m-%d-%Y %H:%M:%S", "%m-%d-%Y %H:%M", "%m-%d-%Y", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d/%m/%Y", "%d-%m-%Y %H:%M:%S", "%d-%m-%Y %H:%M", "%d-%m-%Y", "%Y/%m/%d %H:%M:%S", "%Y/%m/%d %H:%M", "%Y/%m/%d"):
             try:
                 return datetime.strptime(text, fmt).strftime("%m/%d/%Y")
             except ValueError:
@@ -123,7 +123,7 @@ def excel_serial_to_date(serial):
 
         try:
             return excel_serial_to_date(float(text))
-        except ValueError:
+        except (ValueError, TypeError):
             return text
 
     try:
@@ -477,17 +477,18 @@ def main():
 
     for cardNum in libraryCard:
         card = libraryCard[cardNum]
-        
+
+        if not card.get_overbudget(PERCENT_OVER):
+            continue
+
+        allDocuments = ""
         for costCenter in card.get_all_cost_centers():
-            if not costCenter.get_overbudget(PERCENT_OVER):
-                continue
-            
-            allDocuments = ""
             for purchaseStrand in costCenter.get_all_purchase_strands():
                 if purchaseStrand.get_gl() in costCenter.get_approved_gls():
                     allDocuments += str(purchaseStrand.get_document()) + " (GL: " + str(purchaseStrand.get_gl()) + ") (" + str(convert(purchaseStrand.get_amount())) + ")\n"
-            libraryFlag.append(Flag(301,fc[301] + " Card: " + str(cardNum) + ", CC: " + str(costCenter.get_number()) + " (" + str(convert(costCenter.get_total_spent())) + "/" + str(convert(costCenter.get_budget())) + ")","","","",allDocuments))
-            
+
+        libraryFlag.append(Flag(301,fc[301] + " Card: " + str(cardNum) + " (" + str(convert(card.get_total_spent())) + "/" + str(convert(card.get_total_budget())) + ")","","","",allDocuments))
+
 
     print("!WARNING! Output file is being constructed. Please wait before closing the program.")
     
@@ -553,7 +554,7 @@ def main():
         card = libraryCard[cardNum]
         overbudget_cost_centers = [cost_center for cost_center in card.get_all_cost_centers() if cost_center.get_overbudget(PERCENT_OVER)]
 
-        if not overbudget_cost_centers:
+        if not card.get_overbudget(PERCENT_OVER):
             continue
 
         if len(overbudget_cost_centers) == 1:

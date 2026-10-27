@@ -50,6 +50,20 @@ class Card:
 
         return total
 
+    def get_total_budget(self):
+        total = 0
+
+        for cost_center in self.cost_centers:
+            total += cost_center.get_budget()
+
+        return total
+
+    def get_remaining_budget(self, percent_over: float = 1.00):
+        return self.get_total_budget() * percent_over - self.get_total_spent()
+
+    def get_overbudget(self, percent_over: float = 1.00):
+        return self.get_remaining_budget(percent_over) <= 0
+
     def has_cost_center(self,cost_center_number: int):
         for center in self.cost_centers:
             if center.get_number() == cost_center_number:
