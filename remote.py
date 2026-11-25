@@ -22,6 +22,13 @@ from overspendclasses import flag_codes as fc
 
 ##### GENERAL CONSTANTS #####
 
+def sanitize_cli_argument(value):
+    if value is None:
+        return ""
+    text = str(value).strip()
+    return text.replace('"', '').replace("'", "")
+
+
 GL_NUMBER_LENGTH = 8
 CC_NUMBER_LENGTH = 6
 PERCENT_OVER = 1.00
@@ -95,11 +102,36 @@ def foo(variable):
     return variable * 3
 
 def convert(cents):
-    return "$" + f"{cents // 100}.{cents % 100:02d}"
+    cents = int(cents)
+    sign = "-" if cents < 0 else ""
+    cents = abs(cents)
+    return f"{sign}${cents // 100}.{cents % 100:02d}"
 
 def excel_serial_to_date(serial):
-    if serial is None:
+    if serial is None or serial == "":
         return ""
+
+    if isinstance(serial, datetime):
+        return serial.strftime("%m/%d/%Y")
+
+    if hasattr(serial, "year") and hasattr(serial, "month") and hasattr(serial, "day"):
+        return serial.strftime("%m/%d/%Y")
+
+    if isinstance(serial, str):
+        text = serial.strip()
+        if text in {"", "#N/A", "N/A", "nan"}:
+            return ""
+
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%m/%d/%Y %H:%M:%S", "%m/%d/%Y %H:%M", "%m/%d/%Y", "%m-%d-%Y %H:%M:%S", "%m-%d-%Y %H:%M", "%m-%d-%Y", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d/%m/%Y", "%d-%m-%Y %H:%M:%S", "%d-%m-%Y %H:%M", "%d-%m-%Y", "%Y/%m/%d %H:%M:%S", "%Y/%m/%d %H:%M", "%Y/%m/%d"):
+            try:
+                return datetime.strptime(text, fmt).strftime("%m/%d/%Y")
+            except ValueError:
+                pass
+
+        try:
+            return excel_serial_to_date(float(text))
+        except (ValueError, TypeError):
+            return text
 
     try:
         return (
@@ -117,10 +149,12 @@ def checkNone(set):
 def resolve_matching_amount_for_transaction_code(transaction_code, matching_amount):
     normalized_code = str(transaction_code).strip().upper() if transaction_code is not None else ""
 
+    # Normalize and parse matching_amount into a float if possible.
     if matching_amount is None:
         return None
 
     try:
+        # Remove common currency characters and thousands separators
         amt_text = str(matching_amount).replace(",", "").replace("$", "").replace("€", "").strip()
         if amt_text in {"", "#N/A", "N/A", "nan"}:
             return None
@@ -421,6 +455,10 @@ def main():
         module="openpyxl"
     )
 
+    cleaned_args = [sanitize_cli_argument(arg) for arg in sys.argv[1:]]
+    if len(cleaned_args) < 2:
+        raise SystemExit("Expected arguments: BA file path and QA extract folder path")
+
     libraryFlag = []
     libraryCard = {}
     libraryDocument = {}
@@ -428,14 +466,14 @@ def main():
     print("!WARNING! Ensure all relevant files are closed before continuing.\n")
     sleep(2)
     print("Enter Blanket Authority Excel Sheet Directory: ", end="")
-    path = sys.argv[1]
+    path = cleaned_args[0]
     print()
     readBASheet(path,libraryCard,libraryFlag)
     
 
 
     print("Enter QA Transactions (SAP Export) Excel Sheet Folder Directory: ", end="")
-    path = sys.argv[2]
+    path = cleaned_args[1]
     print()
     files = [str(f) for f in Path(path).rglob("*.xlsx")]
 
@@ -450,23 +488,25 @@ def main():
 
     for cardNum in libraryCard:
         card = libraryCard[cardNum]
-        
+
+        if not card.get_overbudget(PERCENT_OVER):
+            continue
+
+        allDocuments = ""
         for costCenter in card.get_all_cost_centers():
-            if not costCenter.get_overbudget(PERCENT_OVER):
-                continue
-            
-            allDocuments = ""
             for purchaseStrand in costCenter.get_all_purchase_strands():
                 if purchaseStrand.get_gl() in costCenter.get_approved_gls():
                     allDocuments += str(purchaseStrand.get_document()) + " (GL: " + str(purchaseStrand.get_gl()) + ") (" + str(convert(purchaseStrand.get_amount())) + ")\n"
-            libraryFlag.append(Flag(301,fc[301] + " Card: " + str(cardNum) + ", CC: " + str(costCenter.get_number()) + " (" + str(convert(costCenter.get_total_spent())) + "/" + str(convert(costCenter.get_budget())) + ")","","","",allDocuments))
-            
+
+        libraryFlag.append(Flag(301,fc[301] + " Card: " + str(cardNum) + " (" + str(convert(card.get_total_spent())) + "/" + str(convert(card.get_total_budget())) + ")","","","",allDocuments))
+
 
     print("!WARNING! Output file is being constructed. Please wait before closing the program.")
     
     wb = Workbook()
     ws = wb.active
     ws.title = "Flagged Transactions"
+    ws.sheet_view.showGridLines = False
     ws.column_dimensions["A"].width = 12  # Flag Code
     ws.column_dimensions["B"].width = 55  # Description
     ws.column_dimensions["C"].width = 65  # File Path
@@ -526,7 +566,7 @@ def main():
         card = libraryCard[cardNum]
         overbudget_cost_centers = [cost_center for cost_center in card.get_all_cost_centers() if cost_center.get_overbudget(PERCENT_OVER)]
 
-        if not overbudget_cost_centers:
+        if not card.get_overbudget(PERCENT_OVER):
             continue
 
         if len(overbudget_cost_centers) == 1:
@@ -539,12 +579,13 @@ def main():
                 continue
 
         detail_ws = wb.create_sheet(title=safe_text(cardNum))
-        detail_ws.column_dimensions["A"].width = 12
-        detail_ws.column_dimensions["B"].width = 15
-        detail_ws.column_dimensions["C"].width = 6
-        detail_ws.column_dimensions["D"].width = 12
-        detail_ws.column_dimensions["E"].width = 18
-        detail_ws.column_dimensions["F"].width = 18
+        detail_ws.sheet_view.showGridLines = False
+        detail_ws.column_dimensions["A"].width = 20
+        detail_ws.column_dimensions["B"].width = 18
+        detail_ws.column_dimensions["C"].width = 16
+        detail_ws.column_dimensions["D"].width = 17
+        detail_ws.column_dimensions["E"].width = 24
+        detail_ws.column_dimensions["F"].width = 24
         detail_ws.column_dimensions["G"].width = 18
         detail_ws.column_dimensions["H"].width = 20
         detail_ws.column_dimensions["I"].width = 25
@@ -644,6 +685,10 @@ def main():
                 ]
                 detail_ws.append(row_values)
 
+                row_fill = PatternFill(fill_type="solid", fgColor="F3F4F6") if detail_ws.max_row % 2 == 0 else PatternFill(fill_type="solid", fgColor="FFFFFF")
+                for cell in detail_ws[detail_ws.max_row]:
+                    cell.fill = row_fill
+
         
 
         for row in detail_ws.iter_rows():
@@ -679,8 +724,8 @@ def main():
 
     print("You can now safely close the program.\n")
 
-    print("Type any key to close.")
-    msvcrt.getch()
+    if sys.stdin is not None and sys.stdin.isatty():
+        msvcrt.getch()
 
     """
     while True:
